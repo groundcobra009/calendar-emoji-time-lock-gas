@@ -1,0 +1,115 @@
+<script>
+  var currentActionButton = null;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    setAllButtonsDisabled(true);
+    google.script.run
+      .withSuccessHandler(function(settings) {
+        fillSettings(settings);
+        setAllButtonsDisabled(false);
+      })
+      .withFailureHandler(function(error) {
+        showError(error);
+        setAllButtonsDisabled(false);
+      })
+      .getSettings();
+  });
+
+  function fillSettings(settings) {
+    document.getElementById('calendarId').value = settings.calendarId;
+    document.getElementById('targetEmoji').value = settings.targetEmoji;
+    document.getElementById('lockEventTitle').value = settings.lockEventTitle;
+    document.getElementById('judgmentStartTime').value = settings.judgmentStartTime;
+    document.getElementById('lockStartTime').value = settings.lockStartTime;
+    // HTMLのtime入力は24:00を扱えないため、終了時刻はテキスト入力です。
+    document.getElementById('lockEndTime').value = settings.lockEndTime;
+    document.getElementById('lookAheadDays').value = settings.lookAheadDays;
+    document.getElementById('includeAllDayEvents').checked = settings.includeAllDayEvents;
+    document.getElementById('recreateExistingLocks').checked = settings.recreateExistingLocks;
+  }
+
+  function collectSettings() {
+    return {
+      calendarId: document.getElementById('calendarId').value,
+      targetEmoji: document.getElementById('targetEmoji').value,
+      lockEventTitle: document.getElementById('lockEventTitle').value,
+      judgmentStartTime: document.getElementById('judgmentStartTime').value,
+      lockStartTime: document.getElementById('lockStartTime').value,
+      lockEndTime: document.getElementById('lockEndTime').value,
+      lookAheadDays: Number(document.getElementById('lookAheadDays').value),
+      includeAllDayEvents: document.getElementById('includeAllDayEvents').checked,
+      recreateExistingLocks: document.getElementById('recreateExistingLocks').checked
+    };
+  }
+
+  function saveSettingsFromForm(button) {
+    runServerAction(button, 'saveSettings', collectSettings());
+  }
+
+  function runAction(button, functionName, confirmMessage) {
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    runServerAction(button, functionName);
+  }
+
+  function runServerAction(button, functionName, argument) {
+    startProcessing(button);
+    var runner = google.script.run
+      .withSuccessHandler(function(result) {
+        finishProcessing();
+        showSuccess(result);
+      })
+      .withFailureHandler(function(error) {
+        finishProcessing();
+        showError(error);
+      });
+
+    if (argument === undefined) {
+      runner[functionName]();
+    } else {
+      runner[functionName](argument);
+    }
+  }
+
+  function startProcessing(button) {
+    currentActionButton = button;
+    button.dataset.originalText = button.textContent;
+    button.textContent = '処理中…';
+    setAllButtonsDisabled(true);
+  }
+
+  function finishProcessing() {
+    if (currentActionButton) {
+      currentActionButton.textContent = currentActionButton.dataset.originalText;
+    }
+    currentActionButton = null;
+    setAllButtonsDisabled(false);
+  }
+
+  function setAllButtonsDisabled(disabled) {
+    document.querySelectorAll('button').forEach(function(button) {
+      button.disabled = disabled;
+    });
+  }
+
+  function showSuccess(result) {
+    result = result || {};
+    var counts = [];
+    if (result.createdCount !== undefined) counts.push('作成件数: ' + result.createdCount + '件');
+    if (result.deletedCount !== undefined) counts.push('削除件数: ' + result.deletedCount + '件');
+    if (result.targetDays !== undefined) counts.push('対象日数: ' + result.targetDays + '日');
+    showResult('success', result.message || '処理が完了しました。', counts.join(' / '));
+  }
+
+  function showError(error) {
+    var message = error && error.message ? error.message : String(error || '処理に失敗しました。');
+    showResult('error', message, '入力内容とカレンダーへのアクセス権限をご確認ください。');
+  }
+
+  function showResult(type, title, details) {
+    var box = document.getElementById('result');
+    box.className = 'result visible ' + type;
+    document.getElementById('resultTitle').textContent = title;
+    document.getElementById('resultCounts').textContent = details || '';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+</script>
