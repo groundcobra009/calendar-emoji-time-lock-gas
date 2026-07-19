@@ -41,15 +41,18 @@ function generateDummyEvents() {
     }
 
     console.log('ダミーデータを作成しました: ' + eventCount + '件');
-    return {
+    var result = {
       success: true,
       message: 'ダミーデータを作成しました。',
       createdCount: eventCount,
       deletedCount: 0,
       targetDays: 61
     };
+    safeLogOperation_('ダミーデータ作成', '成功', result, result.message);
+    return result;
   } catch (error) {
     console.error('ダミーデータ作成エラー: ' + error.stack);
+    safeLogOperation_('ダミーデータ作成', '失敗', null, error.message || String(error));
     throw new Error('ダミーデータの作成に失敗しました。カレンダーIDとアクセス権限を確認してください。');
   }
 }
@@ -76,15 +79,18 @@ function deleteDummyEvents() {
     });
 
     console.log('ダミーデータを削除しました: ' + deletedCount + '件');
-    return {
+    var result = {
       success: true,
       message: 'ダミーデータを削除しました。',
       createdCount: 0,
       deletedCount: deletedCount,
       targetDays: 0
     };
+    safeLogOperation_('ダミーデータ削除', '成功', result, result.message);
+    return result;
   } catch (error) {
     console.error('ダミーデータ削除エラー: ' + error.stack);
+    safeLogOperation_('ダミーデータ削除', '失敗', null, error.message || String(error));
     throw new Error(toUserMessage_(error, 'ダミーデータの削除に失敗しました。'));
   }
 }

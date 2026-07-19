@@ -23,6 +23,7 @@
     document.getElementById('lockStartTime').value = settings.lockStartTime;
     // HTMLのtime入力は24:00を扱えないため、終了時刻はテキスト入力です。
     document.getElementById('lockEndTime').value = settings.lockEndTime;
+    document.getElementById('dailyTriggerTime').value = settings.dailyTriggerTime;
     document.getElementById('lookAheadDays').value = settings.lookAheadDays;
     document.getElementById('includeAllDayEvents').checked = settings.includeAllDayEvents;
     document.getElementById('recreateExistingLocks').checked = settings.recreateExistingLocks;
@@ -36,6 +37,7 @@
       judgmentStartTime: document.getElementById('judgmentStartTime').value,
       lockStartTime: document.getElementById('lockStartTime').value,
       lockEndTime: document.getElementById('lockEndTime').value,
+      dailyTriggerTime: document.getElementById('dailyTriggerTime').value,
       lookAheadDays: Number(document.getElementById('lookAheadDays').value),
       includeAllDayEvents: document.getElementById('includeAllDayEvents').checked,
       recreateExistingLocks: document.getElementById('recreateExistingLocks').checked
@@ -97,10 +99,16 @@
     if (result.createdCount !== undefined) counts.push('作成件数: ' + result.createdCount + '件');
     if (result.deletedCount !== undefined) counts.push('削除件数: ' + result.deletedCount + '件');
     if (result.targetDays !== undefined) counts.push('対象日数: ' + result.targetDays + '日');
+    var hasMetrics = result.createdCount !== undefined || result.deletedCount !== undefined || result.targetDays !== undefined;
+    document.getElementById('resultMetrics').hidden = !hasMetrics;
+    document.getElementById('createdMetric').textContent = result.createdCount || 0;
+    document.getElementById('deletedMetric').textContent = result.deletedCount || 0;
+    document.getElementById('targetDaysMetric').textContent = result.targetDays || 0;
     showResult('success', result.message || '処理が完了しました。', counts.join(' / '));
   }
 
   function showError(error) {
+    document.getElementById('resultMetrics').hidden = true;
     var message = error && error.message ? error.message : String(error || '処理に失敗しました。');
     showResult('error', message, '入力内容とカレンダーへのアクセス権限をご確認ください。');
   }

@@ -36,7 +36,8 @@ function getTargetCalendar(calendarId) {
  * 通常予定を再判定し、対象日にロック予定を作成します。
  * 同時実行による重複を防ぐため、ユーザーロックを使用します。
  */
-function refreshCalendarLocks() {
+function refreshCalendarLocks(operationName) {
+  operationName = operationName || '手動再判定';
   var userLock = LockService.getUserLock();
   if (!userLock.tryLock(30000)) {
     throw new Error('別の再判定処理が実行中です。少し待ってから再度お試しください。');
@@ -71,12 +72,16 @@ function refreshCalendarLocks() {
       message: '再判定が完了しました。',
       createdCount: createdCount,
       deletedCount: deletedCount,
-      targetDays: targetDates.length
+      targetDays: targetDates.length,
+      targetDateKeys: targetDates.map(formatDateKey_)
     };
+    safeUpdateDashboard_(settings, result);
+    safeLogOperation_(operationName, '成功', result, result.message);
     console.log('再判定結果: ' + JSON.stringify(result));
     return result;
   } catch (error) {
     console.error('カレンダー再判定エラー: ' + error.stack);
+    safeLogOperation_(operationName, '失敗', null, error.message || String(error));
     throw new Error(toUserMessage_(error, 'カレンダーの再判定に失敗しました。'));
   } finally {
     userLock.releaseLock();
@@ -100,7 +105,7 @@ function getExistingLockDateKeys_(calendar, settings) {
 /** 毎日の時間主導型トリガーから呼ばれる関数です。 */
 function dailyRefreshCalendarLocks() {
   console.log('毎日のカレンダーロック再判定を開始します。');
-  return refreshCalendarLocks();
+  return refreshCalendarLocks('日次再判定');
 }
 
 /**
@@ -186,15 +191,18 @@ function deleteGeneratedLockEvents() {
     validateSettings(settings);
     var calendar = getTargetCalendar(settings.calendarId);
     var deletedCount = deleteGeneratedLockEventsInternal_(calendar, settings);
-    return {
+    var result = {
       success: true,
       message: '自動生成予定を削除しました。',
       createdCount: 0,
       deletedCount: deletedCount,
       targetDays: 0
     };
+    safeLogOperation_('自動生成予定削除', '成功', result, result.message);
+    return result;
   } catch (error) {
     console.error('自動生成予定の削除エラー: ' + error.stack);
+    safeLogOperation_('自動生成予定削除', '失敗', null, error.message || String(error));
     throw new Error(toUserMessage_(error, '自動生成予定の削除に失敗しました。'));
   }
 }
