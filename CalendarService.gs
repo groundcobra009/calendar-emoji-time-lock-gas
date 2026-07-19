@@ -67,13 +67,54 @@ function refreshCalendarLocks(operationName) {
       createdCount++;
     });
 
+    var allStudyPlans = findStudySessionBufferPlans(calendar, settings);
+    var studyPlans = allStudyPlans;
+    if (!settings.recreateExistingLocks) {
+      var existingStudyKeys = getExistingStudyBufferKeys_(calendar, settings);
+      studyPlans = studyPlans.filter(function(plan) {
+        return !existingStudyKeys[plan.key];
+      });
+    }
+
+    var ruleCounts = {
+      drinking: createdCount,
+      onlineStudy: 0,
+      offlineStudy: 0
+    };
+    var bufferDetails = [];
+    studyPlans.forEach(function(plan) {
+      createStudySessionBufferEvent(calendar, plan);
+      createdCount++;
+      if (plan.ruleId === CEL_CONSTANTS.STUDY_RULES.ONLINE.id) {
+        ruleCounts.onlineStudy++;
+      } else if (plan.ruleId === CEL_CONSTANTS.STUDY_RULES.OFFLINE.id) {
+        ruleCounts.offlineStudy++;
+      }
+      bufferDetails.push({
+        sourceTitle: plan.sourceTitle,
+        ruleId: plan.ruleId,
+        ruleLabel: plan.ruleLabel,
+        phase: plan.phase,
+        phaseLabel: plan.phaseLabel,
+        start: Utilities.formatDate(plan.start, CEL_CONSTANTS.TIME_ZONE, 'yyyy-MM-dd HH:mm'),
+        end: Utilities.formatDate(plan.end, CEL_CONSTANTS.TIME_ZONE, 'yyyy-MM-dd HH:mm')
+      });
+    });
+
+    var allTargetDateKeys = {};
+    targetDates.forEach(function(date) { allTargetDateKeys[formatDateKey_(date)] = true; });
+    allStudyPlans.forEach(function(plan) { allTargetDateKeys[plan.sourceDateKey] = true; });
+    var targetDateKeys = Object.keys(allTargetDateKeys).sort();
+
     var result = {
       success: true,
       message: '再判定が完了しました。',
       createdCount: createdCount,
       deletedCount: deletedCount,
-      targetDays: targetDates.length,
-      targetDateKeys: targetDates.map(formatDateKey_)
+      targetDays: targetDateKeys.length,
+      targetDateKeys: targetDateKeys,
+      ruleCounts: ruleCounts,
+      bufferDetails: bufferDetails
     };
     safeUpdateDashboard_(settings, result);
     safeLogOperation_(operationName, '成功', result, result.message);
@@ -88,6 +129,173 @@ function refreshCalendarLocks(operationName) {
   }
 }
 
+/**
+ * オンライン・オフライン勉強会を判定し、事前・事後バッファの作成計画を返します。
+ */
+function findStudySessionBufferPlans(calendar, settings) {
+  settings = settings || getSettings();
+  calendar = calendar || getTargetCalendar(settings.calendarId);
+  validateSettings(settings);
+
+  var today = startOfDay_(new Date());
+  var rangeEnd = addDays_(today, Number(settings.lookAheadDays) + 1);
+  var events = calendar.getEvents(today, rangeEnd);
+  var plans = [];
+
+  events.forEach(function(event) {
+    var rule = classifyStudySessionEvent_(event, settings);
+    if (!rule) {
+      return;
+    }
+
+    var sourceId = getSourceEventId_(event);
+    var sourceStart = event.getStartTime();
+    var sourceEnd = event.getEndTime();
+    var sourceStartIso = sourceStart.toISOString();
+    var sourceDateKey = formatDateKey_(sourceStart);
+    var beforeHours = Number(rule.beforeHours);
+    var afterHours = Number(rule.afterHours);
+
+    if (beforeHours > 0) {
+      plans.push(buildStudyBufferPlan_(
+        rule,
+        'BEFORE',
+        '事前',
+        new Date(sourceStart.getTime() - beforeHours * 60 * 60 * 1000),
+        new Date(sourceStart.getTime()),
+        event.getTitle(),
+        sourceId,
+        sourceStartIso,
+        sourceDateKey
+      ));
+    }
+    if (afterHours > 0) {
+      plans.push(buildStudyBufferPlan_(
+        rule,
+        'AFTER',
+        '事後',
+        new Date(sourceEnd.getTime()),
+        new Date(sourceEnd.getTime() + afterHours * 60 * 60 * 1000),
+        event.getTitle(),
+        sourceId,
+        sourceStartIso,
+        sourceDateKey
+      ));
+    }
+  });
+
+  return plans;
+}
+
+/** 予定名と設定から勉強会ルールを1種類だけ返します。 */
+function classifyStudySessionEvent_(event, settings) {
+  if (!event || isGeneratedLockEvent_(event, settings)) {
+    return null;
+  }
+  if (event.isAllDayEvent() && !settings.includeAllDayEvents) {
+    return null;
+  }
+
+  var title = String(event.getTitle() || '');
+  // 両方の文字列を含む場合は、移動時間を想定したオフライン設定を優先します。
+  if (settings.offlineStudyEnabled && title.indexOf(settings.offlineStudyMarker) !== -1) {
+    return {
+      id: CEL_CONSTANTS.STUDY_RULES.OFFLINE.id,
+      label: CEL_CONSTANTS.STUDY_RULES.OFFLINE.label,
+      beforeTitle: CEL_CONSTANTS.STUDY_RULES.OFFLINE.beforeTitle,
+      afterTitle: CEL_CONSTANTS.STUDY_RULES.OFFLINE.afterTitle,
+      beforeHours: settings.offlineStudyBeforeHours,
+      afterHours: settings.offlineStudyAfterHours
+    };
+  }
+  if (settings.onlineStudyEnabled && title.indexOf(settings.onlineStudyMarker) !== -1) {
+    return {
+      id: CEL_CONSTANTS.STUDY_RULES.ONLINE.id,
+      label: CEL_CONSTANTS.STUDY_RULES.ONLINE.label,
+      beforeTitle: CEL_CONSTANTS.STUDY_RULES.ONLINE.beforeTitle,
+      afterTitle: CEL_CONSTANTS.STUDY_RULES.ONLINE.afterTitle,
+      beforeHours: settings.onlineStudyBeforeHours,
+      afterHours: settings.onlineStudyAfterHours
+    };
+  }
+  return null;
+}
+
+/** 前後バッファの作成計画を共通形式へ整えます。 */
+function buildStudyBufferPlan_(rule, phase, phaseLabel, start, end, sourceTitle, sourceId, sourceStartIso, sourceDateKey) {
+  return {
+    key: buildStudyBufferKey_(rule.id, phase, sourceId, sourceStartIso),
+    title: phase === 'BEFORE' ? rule.beforeTitle : rule.afterTitle,
+    ruleId: rule.id,
+    ruleLabel: rule.label,
+    phase: phase,
+    phaseLabel: phaseLabel,
+    start: start,
+    end: end,
+    sourceTitle: sourceTitle,
+    sourceId: sourceId,
+    sourceStartIso: sourceStartIso,
+    sourceDateKey: sourceDateKey
+  };
+}
+
+/** 勉強会の前後バッファ予定を作成します。 */
+function createStudySessionBufferEvent(calendar, plan) {
+  var description = [
+    'この予定はCalendar Emoji Time Lockにより自動生成されました。',
+    CEL_CONSTANTS.SYSTEM_EVENT_ID,
+    'BUFFER_RULE: ' + plan.ruleId,
+    'BUFFER_PHASE: ' + plan.phase,
+    'SOURCE_EVENT_ID: ' + plan.sourceId,
+    'SOURCE_EVENT_START: ' + plan.sourceStartIso,
+    'SOURCE_EVENT_TITLE: ' + plan.sourceTitle,
+    '手動で編集せず、設定画面から変更してください。'
+  ].join('\n');
+  var event = calendar.createEvent(plan.title, plan.start, plan.end, { description: description });
+  event.setTransparency(CalendarApp.EventTransparency.OPAQUE);
+  return event;
+}
+
+/** 再生成オフ時に勉強会バッファの重複作成を防ぎます。 */
+function getExistingStudyBufferKeys_(calendar, settings) {
+  var today = startOfDay_(new Date());
+  var events = calendar.getEvents(
+    addDays_(today, -1),
+    addDays_(today, Number(settings.lookAheadDays) + 2)
+  );
+  var keys = {};
+  events.forEach(function(event) {
+    if (!isStudyBufferEvent_(event)) {
+      return;
+    }
+    var description = String(event.getDescription() || '');
+    var ruleId = extractMetadataValue_(description, 'BUFFER_RULE');
+    var phase = extractMetadataValue_(description, 'BUFFER_PHASE');
+    var sourceId = extractMetadataValue_(description, 'SOURCE_EVENT_ID');
+    var sourceStartIso = extractMetadataValue_(description, 'SOURCE_EVENT_START');
+    if (ruleId && phase && sourceId && sourceStartIso) {
+      keys[buildStudyBufferKey_(ruleId, phase, sourceId, sourceStartIso)] = true;
+    }
+  });
+  return keys;
+}
+
+function buildStudyBufferKey_(ruleId, phase, sourceId, sourceStartIso) {
+  return [ruleId, phase, sourceId, sourceStartIso].join('|');
+}
+
+function getSourceEventId_(event) {
+  if (typeof event.getId === 'function' && event.getId()) {
+    return event.getId();
+  }
+  return [event.getTitle(), event.getStartTime().toISOString(), event.getEndTime().toISOString()].join('|');
+}
+
+function extractMetadataValue_(description, key) {
+  var match = String(description || '').match(new RegExp('^' + key + ':\\s*(.+)$', 'm'));
+  return match ? match[1].trim() : '';
+}
+
 /** 再生成オフ時に、既存ロックと同じ日への重複作成を防ぎます。 */
 function getExistingLockDateKeys_(calendar, settings) {
   var today = startOfDay_(new Date());
@@ -95,7 +303,7 @@ function getExistingLockDateKeys_(calendar, settings) {
   var events = calendar.getEvents(today, rangeEnd, { search: settings.lockEventTitle });
   var dateKeys = {};
   events.forEach(function(event) {
-    if (isGeneratedLockEvent_(event, settings)) {
+    if (isLegacyGeneratedLockEvent_(event, settings)) {
       dateKeys[formatDateKey_(event.getStartTime())] = true;
     }
   });
@@ -212,7 +420,15 @@ function deleteGeneratedLockEventsInternal_(calendar, settings) {
   // 過去分と将来分をまとめて掃除するため、十分広い期間を検索します。
   var searchStart = new Date(2000, 0, 1, 0, 0, 0, 0);
   var searchEnd = new Date(2101, 0, 1, 0, 0, 0, 0);
-  var candidates = calendar.getEvents(searchStart, searchEnd, { search: settings.lockEventTitle });
+  var titles = getGeneratedEventTitles_(settings);
+  var candidateMap = {};
+  titles.forEach(function(title) {
+    calendar.getEvents(searchStart, searchEnd, { search: title }).forEach(function(event) {
+      var candidateKey = getSourceEventId_(event) + '|' + event.getStartTime().toISOString();
+      candidateMap[candidateKey] = event;
+    });
+  });
+  var candidates = Object.keys(candidateMap).map(function(key) { return candidateMap[key]; });
   var deletedCount = 0;
 
   candidates.forEach(function(event) {
@@ -227,8 +443,37 @@ function deleteGeneratedLockEventsInternal_(calendar, settings) {
 
 /** 自動生成予定かを、タイトルと説明欄の二重条件で確認します。 */
 function isGeneratedLockEvent_(event, settings) {
+  var title = event.getTitle();
+  return getGeneratedEventTitles_(settings).indexOf(title) !== -1 &&
+    String(event.getDescription() || '').indexOf(CEL_CONSTANTS.SYSTEM_EVENT_ID) !== -1;
+}
+
+function isLegacyGeneratedLockEvent_(event, settings) {
   return event.getTitle() === settings.lockEventTitle &&
     String(event.getDescription() || '').indexOf(CEL_CONSTANTS.SYSTEM_EVENT_ID) !== -1;
+}
+
+function isStudyBufferEvent_(event) {
+  var description = String(event.getDescription() || '');
+  var studyTitles = [
+    CEL_CONSTANTS.STUDY_RULES.ONLINE.beforeTitle,
+    CEL_CONSTANTS.STUDY_RULES.ONLINE.afterTitle,
+    CEL_CONSTANTS.STUDY_RULES.OFFLINE.beforeTitle,
+    CEL_CONSTANTS.STUDY_RULES.OFFLINE.afterTitle
+  ];
+  return studyTitles.indexOf(event.getTitle()) !== -1 &&
+    description.indexOf(CEL_CONSTANTS.SYSTEM_EVENT_ID) !== -1 &&
+    description.indexOf('BUFFER_RULE:') !== -1;
+}
+
+function getGeneratedEventTitles_(settings) {
+  return [
+    settings.lockEventTitle,
+    CEL_CONSTANTS.STUDY_RULES.ONLINE.beforeTitle,
+    CEL_CONSTANTS.STUDY_RULES.ONLINE.afterTitle,
+    CEL_CONSTANTS.STUDY_RULES.OFFLINE.beforeTitle,
+    CEL_CONSTANTS.STUDY_RULES.OFFLINE.afterTitle
+  ];
 }
 
 function startOfDay_(date) {
