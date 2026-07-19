@@ -6,6 +6,7 @@
     google.script.run
       .withSuccessHandler(function(settings) {
         fillSettings(settings);
+        bindRuleToggles();
         setAllButtonsDisabled(false);
       })
       .withFailureHandler(function(error) {
@@ -24,6 +25,14 @@
     // HTMLのtime入力は24:00を扱えないため、終了時刻はテキスト入力です。
     document.getElementById('lockEndTime').value = settings.lockEndTime;
     document.getElementById('dailyTriggerTime').value = settings.dailyTriggerTime;
+    document.getElementById('onlineStudyEnabled').checked = settings.onlineStudyEnabled;
+    document.getElementById('onlineStudyMarker').value = settings.onlineStudyMarker;
+    document.getElementById('onlineStudyBeforeHours').value = settings.onlineStudyBeforeHours;
+    document.getElementById('onlineStudyAfterHours').value = settings.onlineStudyAfterHours;
+    document.getElementById('offlineStudyEnabled').checked = settings.offlineStudyEnabled;
+    document.getElementById('offlineStudyMarker').value = settings.offlineStudyMarker;
+    document.getElementById('offlineStudyBeforeHours').value = settings.offlineStudyBeforeHours;
+    document.getElementById('offlineStudyAfterHours').value = settings.offlineStudyAfterHours;
     document.getElementById('lookAheadDays').value = settings.lookAheadDays;
     document.getElementById('includeAllDayEvents').checked = settings.includeAllDayEvents;
     document.getElementById('recreateExistingLocks').checked = settings.recreateExistingLocks;
@@ -38,6 +47,14 @@
       lockStartTime: document.getElementById('lockStartTime').value,
       lockEndTime: document.getElementById('lockEndTime').value,
       dailyTriggerTime: document.getElementById('dailyTriggerTime').value,
+      onlineStudyEnabled: document.getElementById('onlineStudyEnabled').checked,
+      onlineStudyMarker: document.getElementById('onlineStudyMarker').value,
+      onlineStudyBeforeHours: Number(document.getElementById('onlineStudyBeforeHours').value),
+      onlineStudyAfterHours: Number(document.getElementById('onlineStudyAfterHours').value),
+      offlineStudyEnabled: document.getElementById('offlineStudyEnabled').checked,
+      offlineStudyMarker: document.getElementById('offlineStudyMarker').value,
+      offlineStudyBeforeHours: Number(document.getElementById('offlineStudyBeforeHours').value),
+      offlineStudyAfterHours: Number(document.getElementById('offlineStudyAfterHours').value),
       lookAheadDays: Number(document.getElementById('lookAheadDays').value),
       includeAllDayEvents: document.getElementById('includeAllDayEvents').checked,
       recreateExistingLocks: document.getElementById('recreateExistingLocks').checked
@@ -45,7 +62,46 @@
   }
 
   function saveSettingsFromForm(button) {
+    if (!validateStudySettings()) return;
     runServerAction(button, 'saveSettings', collectSettings());
+  }
+
+  function bindRuleToggles() {
+    ['onlineStudy', 'offlineStudy'].forEach(function(prefix) {
+      document.getElementById(prefix + 'Enabled').addEventListener('change', function() {
+        updateRuleAvailability(prefix);
+      });
+      updateRuleAvailability(prefix);
+    });
+  }
+
+  function updateRuleAvailability(prefix) {
+    var enabled = document.getElementById(prefix + 'Enabled').checked;
+    ['Marker', 'BeforeHours', 'AfterHours'].forEach(function(suffix) {
+      document.getElementById(prefix + suffix).disabled = !enabled;
+    });
+  }
+
+  function validateStudySettings() {
+    var rules = [
+      { prefix: 'onlineStudy', label: 'オンライン勉強会' },
+      { prefix: 'offlineStudy', label: 'オフライン勉強会' }
+    ];
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!document.getElementById(rule.prefix + 'Enabled').checked) continue;
+      if (!document.getElementById(rule.prefix + 'Marker').value.trim()) {
+        showResult('error', rule.label + 'の判定文字列を入力してください。', '絵文字またはキーワードを指定できます。');
+        return false;
+      }
+      var beforeInput = document.getElementById(rule.prefix + 'BeforeHours');
+      var afterInput = document.getElementById(rule.prefix + 'AfterHours');
+      if (!beforeInput.checkValidity() || !afterInput.checkValidity()) {
+        showResult('error', rule.label + 'の前後時間を確認してください。', '0時間から24時間まで、0.5時間刻みで入力してください。');
+        return false;
+      }
+    }
+    return true;
   }
 
   function runAction(button, functionName, confirmMessage) {

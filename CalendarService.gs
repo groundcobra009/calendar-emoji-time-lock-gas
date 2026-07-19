@@ -117,7 +117,7 @@ function refreshCalendarLocks(operationName) {
       bufferDetails: bufferDetails
     };
     safeUpdateDashboard_(settings, result);
-    safeLogOperation_(operationName, '成功', result, result.message);
+    safeLogOperation_(operationName, '成功', result, buildRefreshLogDetail_(result));
     console.log('再判定結果: ' + JSON.stringify(result));
     return result;
   } catch (error) {
@@ -127,6 +127,16 @@ function refreshCalendarLocks(operationName) {
   } finally {
     userLock.releaseLock();
   }
+}
+
+function buildRefreshLogDetail_(result) {
+  var counts = result.ruleCounts || {};
+  return [
+    result.message,
+    '飲み会: ' + Number(counts.drinking || 0) + '件',
+    'オンライン: ' + Number(counts.onlineStudy || 0) + '件',
+    'オフライン: ' + Number(counts.offlineStudy || 0) + '件'
+  ].join(' / ');
 }
 
 /**

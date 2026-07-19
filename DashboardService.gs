@@ -109,7 +109,7 @@ function ensureDashboardSheet_(spreadsheet) {
   var sheet = spreadsheet.getSheetByName(CEL_CONSTANTS.DASHBOARD_SHEET_NAME);
   if (!sheet) {
     sheet = spreadsheet.insertSheet(CEL_CONSTANTS.DASHBOARD_SHEET_NAME);
-    sheet.getRange('A1:D1').merge().setValue('Calendar Emoji Time Lock｜運用ダッシュボード');
+    sheet.getRange('A1:F1').merge().setValue('Calendar Emoji Time Lock｜運用ダッシュボード');
     sheet.getRange('A3').setValue('「今すぐ再判定」を実行すると、ここに最新結果が表示されます。');
     sheet.setTabColor('#1F3F8E');
   }
@@ -121,6 +121,8 @@ function updateDashboard_(settings, result) {
   var spreadsheet = getOperationSpreadsheet_();
   var sheet = ensureDashboardSheet_(spreadsheet);
   var targetDateKeys = result.targetDateKeys || [];
+  var ruleCounts = result.ruleCounts || {};
+  var bufferDetails = result.bufferDetails || [];
   var weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
   var weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
 
@@ -131,7 +133,7 @@ function updateDashboard_(settings, result) {
 
   sheet.clearContents();
   sheet.getCharts().forEach(function(chart) { sheet.removeChart(chart); });
-  sheet.getRange('A1:D1').breakApart().merge()
+  sheet.getRange('A1:F1').breakApart().merge()
     .setValue('Calendar Emoji Time Lock｜運用ダッシュボード')
     .setBackground('#1F3F8E')
     .setFontColor('#FFFFFF')
@@ -145,54 +147,95 @@ function updateDashboard_(settings, result) {
     ['削除件数', Number(result.deletedCount || 0)],
     ['対象日数', Number(result.targetDays || 0)]
   ]);
-  sheet.getRange('D3:E7').setValues([
-    ['判定絵文字', settings.targetEmoji],
-    ['判定開始', settings.judgmentStartTime],
-    ['ロック時間', settings.lockStartTime + '〜' + settings.lockEndTime],
+  sheet.getRange('D3:E10').setValues([
+    ['飲み会判定', settings.targetEmoji + ' / ' + settings.judgmentStartTime + '以降'],
+    ['飲み会ロック', settings.lockStartTime + '〜' + settings.lockEndTime],
+    ['オンライン', formatStudyRuleSummary_(settings.onlineStudyEnabled, settings.onlineStudyMarker, settings.onlineStudyBeforeHours, settings.onlineStudyAfterHours)],
+    ['オフライン', formatStudyRuleSummary_(settings.offlineStudyEnabled, settings.offlineStudyMarker, settings.offlineStudyBeforeHours, settings.offlineStudyAfterHours)],
     ['判定期間', settings.lookAheadDays + '日先まで'],
+    ['終日予定', settings.includeAllDayEvents ? '対象' : '対象外'],
+    ['再生成', settings.recreateExistingLocks ? 'オン' : 'オフ'],
     ['日次実行', settings.dailyTriggerTime + '頃']
   ]);
 
-  sheet.getRange('A8:D8').setValues([['対象日', '状態', 'ロック時間', '判定絵文字']]);
-  if (targetDateKeys.length > 0) {
-    sheet.getRange(9, 1, targetDateKeys.length, 4).setValues(targetDateKeys.map(function(dateKey) {
-      return [dateKey, 'ロック対象', settings.lockStartTime + '〜' + settings.lockEndTime, settings.targetEmoji];
-    }));
-  } else {
-    sheet.getRange('A9').setValue('対象日はありません。');
-  }
+  var categoryRows = [
+    ['種別', '作成件数'],
+    ['🍺 飲み会固定ロック', Number(ruleCounts.drinking || 0)],
+    ['💻 オンライン前後', Number(ruleCounts.onlineStudy || 0)],
+    ['🏫 オフライン前後', Number(ruleCounts.offlineStudy || 0)]
+  ];
+  sheet.getRange(9, 1, categoryRows.length, 2).setValues(categoryRows);
 
   var weekdayRows = [['曜日', '対象日数']];
   weekdayLabels.forEach(function(label, index) {
     weekdayRows.push([label + '曜日', weekdayCounts[index]]);
   });
-  sheet.getRange(8, 6, weekdayRows.length, 2).setValues(weekdayRows);
+  sheet.getRange(9, 4, weekdayRows.length, 2).setValues(weekdayRows);
+
+  sheet.getRange('A18:E18').setValues([['元予定', '種別', '区分', 'ブロック開始', 'ブロック終了']]);
+  if (bufferDetails.length > 0) {
+    sheet.getRange(19, 1, bufferDetails.length, 5).setValues(bufferDetails.map(function(detail) {
+      return [detail.sourceTitle, detail.ruleLabel, detail.phaseLabel, detail.start, detail.end];
+    }));
+  } else {
+    sheet.getRange('A19').setValue('勉強会の前後バッファはありません。');
+  }
+
+  sheet.getRange('G18:H18').setValues([['対象日', '状態']]);
+  if (targetDateKeys.length > 0) {
+    sheet.getRange(19, 7, targetDateKeys.length, 2).setValues(targetDateKeys.map(function(dateKey) {
+      return [dateKey, 'ロック対象'];
+    }));
+  } else {
+    sheet.getRange('G19').setValue('対象日はありません。');
+  }
 
   sheet.getRange('A3:A6').setFontWeight('bold').setBackground('#EEF2FA');
-  sheet.getRange('D3:D7').setFontWeight('bold').setBackground('#EEF2FA');
-  sheet.getRange('A8:D8').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
-  sheet.getRange('F8:G8').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange('D3:D10').setFontWeight('bold').setBackground('#EEF2FA');
+  sheet.getRange('A9:B9').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange('D9:E9').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange('A18:E18').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange('G18:H18').setBackground('#1F3F8E').setFontColor('#FFFFFF').setFontWeight('bold');
   sheet.setFrozenRows(1);
-  sheet.setColumnWidth(1, 130);
+  sheet.setColumnWidth(1, 240);
   sheet.setColumnWidth(2, 120);
   sheet.setColumnWidth(3, 150);
   sheet.setColumnWidth(4, 120);
   sheet.setColumnWidth(5, 130);
-  sheet.setColumnWidths(6, 2, 100);
+  sheet.setColumnWidths(6, 3, 110);
   sheet.setTabColor('#1F3F8E');
 
-  var chart = sheet.newChart()
+  var categoryChart = sheet.newChart()
     .asColumnChart()
-    .addRange(sheet.getRange('F8:G15'))
+    .addRange(sheet.getRange('A9:B12'))
     .setNumHeaders(1)
-    .setPosition(8, 9, 0, 0)
-    .setOption('title', '曜日別のロック対象日数')
+    .setPosition(9, 7, 0, 0)
+    .setOption('title', '種別別の自動作成件数')
     .setOption('legend', { position: 'none' })
     .setOption('colors', ['#1F3F8E'])
     .setOption('backgroundColor', '#FFFFFF')
     .build();
-  sheet.insertChart(chart);
+  sheet.insertChart(categoryChart);
+
+  var weekdayChart = sheet.newChart()
+    .asColumnChart()
+    .addRange(sheet.getRange('D9:E16'))
+    .setNumHeaders(1)
+    .setPosition(9, 13, 0, 0)
+    .setOption('title', '曜日別のロック対象日数')
+    .setOption('legend', { position: 'none' })
+    .setOption('colors', ['#536B3F'])
+    .setOption('backgroundColor', '#FFFFFF')
+    .build();
+  sheet.insertChart(weekdayChart);
   return sheet;
+}
+
+function formatStudyRuleSummary_(enabled, marker, beforeHours, afterHours) {
+  if (!enabled) {
+    return '無効';
+  }
+  return marker + ' / 前' + beforeHours + 'h・後' + afterHours + 'h';
 }
 
 /** ダッシュボード失敗を本体処理へ波及させない安全ラッパーです。 */
