@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <h1>カレンダーロック設定</h1>
+        <p>絵文字付きの予定を検知し、その日の指定時間帯を自動で確保します。</p>
+      </header>
+
+      <div id="result" class="result" role="status" aria-live="polite">
+        <div id="resultTitle" class="result-title"></div>
+        <div id="resultCounts" class="result-counts"></div>
+      </div>
+
+      <section class="section">
+        <h2>対象カレンダー</h2>
+        <div class="field">
+          <label for="calendarId">カレンダーID</label>
+          <input id="calendarId" type="text" autocomplete="off" placeholder="primary">
+          <span class="hint">メインカレンダーは primary、共有カレンダーは設定画面に表示されるIDを入力します。</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>判定条件</h2>
+        <div class="field">
+          <label for="targetEmoji">判定絵文字</label>
+          <input id="targetEmoji" type="text" autocomplete="off" placeholder="🍺">
+        </div>
+        <div class="field">
+          <label for="judgmentStartTime">判定開始時刻</label>
+          <input id="judgmentStartTime" type="time" step="60">
+          <span class="hint">この時刻以降に開始、または重なる予定を対象にします。</span>
+        </div>
+        <div class="field">
+          <label for="lookAheadDays">判定期間の日数</label>
+          <input id="lookAheadDays" type="number" min="0" max="365" step="1">
+          <span class="hint">今日を0日目として、指定日数後までを含めて判定します。</span>
+        </div>
+        <div class="field check-row">
+          <input id="includeAllDayEvents" type="checkbox">
+          <label for="includeAllDayEvents">終日予定を対象にする</label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>自動ロック予定</h2>
+        <div class="field">
+          <label for="lockEventTitle">自動生成予定名</label>
+          <input id="lockEventTitle" type="text" autocomplete="off">
+        </div>
+        <div class="field time-row">
+          <div>
+            <label for="lockStartTime">開始時刻</label>
+            <input id="lockStartTime" type="time" step="60">
+          </div>
+          <div>
+            <label for="lockEndTime">終了時刻</label>
+            <input id="lockEndTime" type="text" inputmode="numeric" placeholder="24:00" pattern="(?:[01]\d|2[0-3]):[0-5]\d|24:00">
+          </div>
+        </div>
+        <div class="field check-row">
+          <input id="recreateExistingLocks" type="checkbox">
+          <label for="recreateExistingLocks">再判定時に既存ロックを削除して再生成する</label>
+        </div>
+      </section>
+
+      <section class="section actions">
+        <h2>保存・実行</h2>
+        <button class="primary" onclick="saveSettingsFromForm(this)">設定を保存</button>
+        <button onclick="runAction(this, 'refreshCalendarLocks')">今すぐ再判定</button>
+        <button onclick="runAction(this, 'createDailyTrigger')">毎日実行トリガーを設定</button>
+      </section>
+
+      <section class="section actions">
+        <h2>デモ・削除</h2>
+        <button onclick="runAction(this, 'generateDummyEvents')">ダミーデータを作成</button>
+        <button class="danger" onclick="runAction(this, 'deleteDummyEvents', '識別子を持つダミー予定を削除します。よろしいですか？')">ダミーデータを削除</button>
+        <button class="danger" onclick="runAction(this, 'deleteGeneratedLockEvents', '自動生成予定名と識別子が一致するロック予定を削除します。よろしいですか？')">自動生成予定を削除</button>
+      </section>
+    </main>
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>
