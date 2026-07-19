@@ -5,6 +5,9 @@
 
 var CEL_CONSTANTS = Object.freeze({
   PROPERTY_KEY: 'CALENDAR_EMOJI_TIME_LOCK_SETTINGS',
+  SPREADSHEET_ID_PROPERTY_KEY: 'CALENDAR_EMOJI_TIME_LOCK_SPREADSHEET_ID',
+  DASHBOARD_SHEET_NAME: 'カレンダーロック_ダッシュボード',
+  LOG_SHEET_NAME: 'カレンダーロック_ログ',
   SYSTEM_EVENT_ID: 'SYSTEM_EVENT_ID: CALENDAR_EMOJI_TIME_LOCK',
   DUMMY_EVENT_ID: 'DUMMY_EVENT_ID: CALENDAR_EMOJI_TIME_LOCK_DEMO',
   LOCK_DESCRIPTION: 'この予定はCalendar Emoji Time Lockにより自動生成されました。\n' +
@@ -21,6 +24,7 @@ var CEL_CONSTANTS = Object.freeze({
     judgmentStartTime: '18:00',
     lockStartTime: '18:00',
     lockEndTime: '24:00',
+    dailyTriggerTime: '03:00',
     lookAheadDays: 31,
     includeAllDayEvents: false,
     recreateExistingLocks: true
@@ -48,6 +52,7 @@ function getSettings() {
     judgmentStartTime: saved.judgmentStartTime !== undefined ? saved.judgmentStartTime : defaults.judgmentStartTime,
     lockStartTime: saved.lockStartTime !== undefined ? saved.lockStartTime : defaults.lockStartTime,
     lockEndTime: saved.lockEndTime !== undefined ? saved.lockEndTime : defaults.lockEndTime,
+    dailyTriggerTime: saved.dailyTriggerTime !== undefined ? saved.dailyTriggerTime : defaults.dailyTriggerTime,
     lookAheadDays: saved.lookAheadDays !== undefined ? Number(saved.lookAheadDays) : defaults.lookAheadDays,
     includeAllDayEvents: saved.includeAllDayEvents !== undefined ? Boolean(saved.includeAllDayEvents) : defaults.includeAllDayEvents,
     recreateExistingLocks: saved.recreateExistingLocks !== undefined ? Boolean(saved.recreateExistingLocks) : defaults.recreateExistingLocks
@@ -65,10 +70,20 @@ function saveSettings(settings) {
       CEL_CONSTANTS.PROPERTY_KEY,
       JSON.stringify(normalized)
     );
+    if (typeof rememberActiveSpreadsheet_ === 'function') {
+      rememberActiveSpreadsheet_();
+    }
     console.log('設定を保存しました: ' + JSON.stringify(normalized));
-    return { success: true, message: '設定を保存しました。', settings: normalized };
+    var result = { success: true, message: '設定を保存しました。', settings: normalized };
+    if (typeof safeLogOperation_ === 'function') {
+      safeLogOperation_('設定保存', '成功', result, '設定をUserPropertiesへ保存しました。');
+    }
+    return result;
   } catch (error) {
     console.error('設定の保存に失敗しました: ' + error.stack);
+    if (typeof safeLogOperation_ === 'function') {
+      safeLogOperation_('設定保存', '失敗', null, error.message || String(error));
+    }
     throw new Error(toUserMessage_(error, '設定の保存に失敗しました。'));
   }
 }
@@ -88,6 +103,7 @@ function validateSettings(settings) {
   var judgmentMinutes = parseTimeToMinutes_(settings.judgmentStartTime, false, '判定開始時刻');
   var lockStartMinutes = parseTimeToMinutes_(settings.lockStartTime, false, 'ロック開始時刻');
   var lockEndMinutes = parseTimeToMinutes_(settings.lockEndTime, true, 'ロック終了時刻');
+  parseTimeToMinutes_(settings.dailyTriggerTime, false, '毎日実行時刻');
   if (lockEndMinutes <= lockStartMinutes) {
     throw new Error('ロック終了時刻は、ロック開始時刻より後に設定してください。');
   }
@@ -107,6 +123,7 @@ function normalizeSettings_(settings) {
     judgmentStartTime: String(settings.judgmentStartTime || '').trim(),
     lockStartTime: String(settings.lockStartTime || '').trim(),
     lockEndTime: String(settings.lockEndTime || '').trim(),
+    dailyTriggerTime: String(settings.dailyTriggerTime || '').trim(),
     lookAheadDays: Number(settings.lookAheadDays),
     includeAllDayEvents: settings.includeAllDayEvents === true || settings.includeAllDayEvents === 'true',
     recreateExistingLocks: settings.recreateExistingLocks === true || settings.recreateExistingLocks === 'true'

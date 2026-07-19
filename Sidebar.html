@@ -14,6 +14,11 @@
 
       <div id="result" class="result" role="status" aria-live="polite">
         <div id="resultTitle" class="result-title"></div>
+        <div id="resultMetrics" class="metric-grid" hidden>
+          <div class="metric"><span>作成</span><strong id="createdMetric">0</strong><small>件</small></div>
+          <div class="metric"><span>削除</span><strong id="deletedMetric">0</strong><small>件</small></div>
+          <div class="metric"><span>対象</span><strong id="targetDaysMetric">0</strong><small>日</small></div>
+        </div>
         <div id="resultCounts" class="result-counts"></div>
       </div>
 
@@ -70,11 +75,22 @@
         </div>
       </section>
 
+      <section class="section">
+        <h2>毎日の自動実行</h2>
+        <div class="field">
+          <label for="dailyTriggerTime">毎日実行時刻</label>
+          <input id="dailyTriggerTime" type="time" step="60">
+          <span class="hint">Apps Scriptの仕様により、指定時刻の前後約15分に実行されます。</span>
+        </div>
+      </section>
+
       <section class="section actions">
         <h2>保存・実行</h2>
         <button class="primary" onclick="saveSettingsFromForm(this)">設定を保存</button>
         <button onclick="runAction(this, 'refreshCalendarLocks')">今すぐ再判定</button>
         <button onclick="runAction(this, 'createDailyTrigger')">毎日実行トリガーを設定</button>
+        <button onclick="runAction(this, 'showDashboard')">ダッシュボードを表示</button>
+        <button onclick="runAction(this, 'showLogSheet')">ログシートを表示</button>
       </section>
 
       <section class="section actions">
