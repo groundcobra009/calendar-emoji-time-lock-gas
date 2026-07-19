@@ -10,6 +10,20 @@ var CEL_CONSTANTS = Object.freeze({
   LOG_SHEET_NAME: 'カレンダーロック_ログ',
   SYSTEM_EVENT_ID: 'SYSTEM_EVENT_ID: CALENDAR_EMOJI_TIME_LOCK',
   DUMMY_EVENT_ID: 'DUMMY_EVENT_ID: CALENDAR_EMOJI_TIME_LOCK_DEMO',
+  STUDY_RULES: Object.freeze({
+    ONLINE: Object.freeze({
+      id: 'ONLINE_STUDY',
+      label: 'オンライン勉強会',
+      beforeTitle: '🔒 事前ブロック｜オンライン勉強会',
+      afterTitle: '🔒 事後ブロック｜オンライン勉強会'
+    }),
+    OFFLINE: Object.freeze({
+      id: 'OFFLINE_STUDY',
+      label: 'オフライン勉強会',
+      beforeTitle: '🔒 事前ブロック｜オフライン勉強会',
+      afterTitle: '🔒 事後ブロック｜オフライン勉強会'
+    })
+  }),
   LOCK_DESCRIPTION: 'この予定はCalendar Emoji Time Lockにより自動生成されました。\n' +
     'SYSTEM_EVENT_ID: CALENDAR_EMOJI_TIME_LOCK\n' +
     '手動で編集せず、設定画面から変更してください。',
@@ -25,6 +39,14 @@ var CEL_CONSTANTS = Object.freeze({
     lockStartTime: '18:00',
     lockEndTime: '24:00',
     dailyTriggerTime: '03:00',
+    onlineStudyEnabled: true,
+    onlineStudyMarker: '💻',
+    onlineStudyBeforeHours: 0.5,
+    onlineStudyAfterHours: 0.5,
+    offlineStudyEnabled: true,
+    offlineStudyMarker: '🏫',
+    offlineStudyBeforeHours: 1.5,
+    offlineStudyAfterHours: 1.5,
     lookAheadDays: 31,
     includeAllDayEvents: false,
     recreateExistingLocks: true
@@ -53,9 +75,17 @@ function getSettings() {
     lockStartTime: saved.lockStartTime !== undefined ? saved.lockStartTime : defaults.lockStartTime,
     lockEndTime: saved.lockEndTime !== undefined ? saved.lockEndTime : defaults.lockEndTime,
     dailyTriggerTime: saved.dailyTriggerTime !== undefined ? saved.dailyTriggerTime : defaults.dailyTriggerTime,
+    onlineStudyEnabled: saved.onlineStudyEnabled !== undefined ? coerceBoolean_(saved.onlineStudyEnabled) : defaults.onlineStudyEnabled,
+    onlineStudyMarker: saved.onlineStudyMarker !== undefined ? saved.onlineStudyMarker : defaults.onlineStudyMarker,
+    onlineStudyBeforeHours: saved.onlineStudyBeforeHours !== undefined ? Number(saved.onlineStudyBeforeHours) : defaults.onlineStudyBeforeHours,
+    onlineStudyAfterHours: saved.onlineStudyAfterHours !== undefined ? Number(saved.onlineStudyAfterHours) : defaults.onlineStudyAfterHours,
+    offlineStudyEnabled: saved.offlineStudyEnabled !== undefined ? coerceBoolean_(saved.offlineStudyEnabled) : defaults.offlineStudyEnabled,
+    offlineStudyMarker: saved.offlineStudyMarker !== undefined ? saved.offlineStudyMarker : defaults.offlineStudyMarker,
+    offlineStudyBeforeHours: saved.offlineStudyBeforeHours !== undefined ? Number(saved.offlineStudyBeforeHours) : defaults.offlineStudyBeforeHours,
+    offlineStudyAfterHours: saved.offlineStudyAfterHours !== undefined ? Number(saved.offlineStudyAfterHours) : defaults.offlineStudyAfterHours,
     lookAheadDays: saved.lookAheadDays !== undefined ? Number(saved.lookAheadDays) : defaults.lookAheadDays,
-    includeAllDayEvents: saved.includeAllDayEvents !== undefined ? Boolean(saved.includeAllDayEvents) : defaults.includeAllDayEvents,
-    recreateExistingLocks: saved.recreateExistingLocks !== undefined ? Boolean(saved.recreateExistingLocks) : defaults.recreateExistingLocks
+    includeAllDayEvents: saved.includeAllDayEvents !== undefined ? coerceBoolean_(saved.includeAllDayEvents) : defaults.includeAllDayEvents,
+    recreateExistingLocks: saved.recreateExistingLocks !== undefined ? coerceBoolean_(saved.recreateExistingLocks) : defaults.recreateExistingLocks
   };
 }
 
@@ -104,6 +134,16 @@ function validateSettings(settings) {
   var lockStartMinutes = parseTimeToMinutes_(settings.lockStartTime, false, 'ロック開始時刻');
   var lockEndMinutes = parseTimeToMinutes_(settings.lockEndTime, true, 'ロック終了時刻');
   parseTimeToMinutes_(settings.dailyTriggerTime, false, '毎日実行時刻');
+  validateBufferHours_(settings.onlineStudyBeforeHours, 'オンライン勉強会の開始前時間');
+  validateBufferHours_(settings.onlineStudyAfterHours, 'オンライン勉強会の終了後時間');
+  validateBufferHours_(settings.offlineStudyBeforeHours, 'オフライン勉強会の開始前時間');
+  validateBufferHours_(settings.offlineStudyAfterHours, 'オフライン勉強会の終了後時間');
+  if (settings.onlineStudyEnabled && !String(settings.onlineStudyMarker || '').trim()) {
+    throw new Error('オンライン勉強会の判定文字列を入力してください。');
+  }
+  if (settings.offlineStudyEnabled && !String(settings.offlineStudyMarker || '').trim()) {
+    throw new Error('オフライン勉強会の判定文字列を入力してください。');
+  }
   if (lockEndMinutes <= lockStartMinutes) {
     throw new Error('ロック終了時刻は、ロック開始時刻より後に設定してください。');
   }
@@ -116,6 +156,7 @@ function validateSettings(settings) {
 /** フォーム値の型と余分な空白を整えます。 */
 function normalizeSettings_(settings) {
   settings = settings || {};
+  var defaults = CEL_CONSTANTS.DEFAULT_SETTINGS;
   return {
     calendarId: String(settings.calendarId || '').trim(),
     targetEmoji: String(settings.targetEmoji || '').trim(),
@@ -124,10 +165,47 @@ function normalizeSettings_(settings) {
     lockStartTime: String(settings.lockStartTime || '').trim(),
     lockEndTime: String(settings.lockEndTime || '').trim(),
     dailyTriggerTime: String(settings.dailyTriggerTime || '').trim(),
+    onlineStudyEnabled: settings.onlineStudyEnabled !== undefined
+      ? coerceBoolean_(settings.onlineStudyEnabled)
+      : defaults.onlineStudyEnabled,
+    onlineStudyMarker: settings.onlineStudyMarker !== undefined
+      ? String(settings.onlineStudyMarker).trim()
+      : defaults.onlineStudyMarker,
+    onlineStudyBeforeHours: settings.onlineStudyBeforeHours !== undefined && settings.onlineStudyBeforeHours !== ''
+      ? Number(settings.onlineStudyBeforeHours)
+      : defaults.onlineStudyBeforeHours,
+    onlineStudyAfterHours: settings.onlineStudyAfterHours !== undefined && settings.onlineStudyAfterHours !== ''
+      ? Number(settings.onlineStudyAfterHours)
+      : defaults.onlineStudyAfterHours,
+    offlineStudyEnabled: settings.offlineStudyEnabled !== undefined
+      ? coerceBoolean_(settings.offlineStudyEnabled)
+      : defaults.offlineStudyEnabled,
+    offlineStudyMarker: settings.offlineStudyMarker !== undefined
+      ? String(settings.offlineStudyMarker).trim()
+      : defaults.offlineStudyMarker,
+    offlineStudyBeforeHours: settings.offlineStudyBeforeHours !== undefined && settings.offlineStudyBeforeHours !== ''
+      ? Number(settings.offlineStudyBeforeHours)
+      : defaults.offlineStudyBeforeHours,
+    offlineStudyAfterHours: settings.offlineStudyAfterHours !== undefined && settings.offlineStudyAfterHours !== ''
+      ? Number(settings.offlineStudyAfterHours)
+      : defaults.offlineStudyAfterHours,
     lookAheadDays: Number(settings.lookAheadDays),
     includeAllDayEvents: settings.includeAllDayEvents === true || settings.includeAllDayEvents === 'true',
     recreateExistingLocks: settings.recreateExistingLocks === true || settings.recreateExistingLocks === 'true'
   };
+}
+
+/** 勉強会の前後バッファ時間を0〜24時間で検証します。 */
+function validateBufferHours_(value, label) {
+  var hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 0 || hours > 24) {
+    throw new Error(label + 'は0時間から24時間までの数値で入力してください。');
+  }
+  return true;
+}
+
+function coerceBoolean_(value) {
+  return value === true || value === 'true';
 }
 
 /** HH:mm を0時からの分数へ変換します。allow24=true の場合のみ24:00を許可します。 */
