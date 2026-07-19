@@ -9,7 +9,7 @@
     <main class="container">
       <header class="header">
         <h1>カレンダーロック設定</h1>
-        <p>絵文字付きの予定を検知し、その日の指定時間帯を自動で確保します。</p>
+        <p>飲み会の夜間ロックと、オンライン・オフライン勉強会の前後時間を自動で確保します。</p>
       </header>
 
       <div id="result" class="result" role="status" aria-live="polite">
@@ -31,10 +31,14 @@
         </div>
       </section>
 
-      <section class="section">
-        <h2>判定条件</h2>
+      <section class="section rule-section drinking-rule">
+        <div class="rule-heading">
+          <h2>🍺 飲み会</h2>
+          <span class="rule-badge">固定時間ロック</span>
+        </div>
+        <p class="section-description">指定時刻以降に重なる予定がある日を、決まった時間帯でブロックします。</p>
         <div class="field">
-          <label for="targetEmoji">判定絵文字</label>
+          <label for="targetEmoji">判定文字列</label>
           <input id="targetEmoji" type="text" autocomplete="off" placeholder="🍺">
         </div>
         <div class="field">
@@ -43,20 +47,7 @@
           <span class="hint">この時刻以降に開始、または重なる予定を対象にします。</span>
         </div>
         <div class="field">
-          <label for="lookAheadDays">判定期間の日数</label>
-          <input id="lookAheadDays" type="number" min="0" max="365" step="1">
-          <span class="hint">今日を0日目として、指定日数後までを含めて判定します。</span>
-        </div>
-        <div class="field check-row">
-          <input id="includeAllDayEvents" type="checkbox">
-          <label for="includeAllDayEvents">終日予定を対象にする</label>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2>自動ロック予定</h2>
-        <div class="field">
-          <label for="lockEventTitle">自動生成予定名</label>
+          <label for="lockEventTitle">ロック予定名</label>
           <input id="lockEventTitle" type="text" autocomplete="off">
         </div>
         <div class="field time-row">
@@ -68,6 +59,73 @@
             <label for="lockEndTime">終了時刻</label>
             <input id="lockEndTime" type="text" inputmode="numeric" placeholder="24:00" pattern="(?:[01]\d|2[0-3]):[0-5]\d|24:00">
           </div>
+        </div>
+      </section>
+
+      <section class="section rule-section online-rule">
+        <div class="rule-heading">
+          <h2>💻 オンライン勉強会</h2>
+          <span class="rule-badge">前後バッファ</span>
+        </div>
+        <div class="field check-row rule-toggle">
+          <input id="onlineStudyEnabled" type="checkbox">
+          <label for="onlineStudyEnabled">オンライン勉強会ルールを有効にする</label>
+        </div>
+        <div class="field">
+          <label for="onlineStudyMarker">判定文字列</label>
+          <input id="onlineStudyMarker" type="text" autocomplete="off" placeholder="💻">
+          <span class="hint">絵文字または「オンライン勉強会」などのキーワードを指定できます。</span>
+        </div>
+        <div class="field time-row">
+          <div>
+            <label for="onlineStudyBeforeHours">開始前</label>
+            <input id="onlineStudyBeforeHours" type="number" min="0" max="24" step="0.5" required>
+          </div>
+          <div>
+            <label for="onlineStudyAfterHours">終了後</label>
+            <input id="onlineStudyAfterHours" type="number" min="0" max="24" step="0.5" required>
+          </div>
+        </div>
+        <span class="hint">単位は時間です。例：19:00〜21:00、前後0.5時間 → 18:30〜19:00と21:00〜21:30</span>
+      </section>
+
+      <section class="section rule-section offline-rule">
+        <div class="rule-heading">
+          <h2>🏫 オフライン勉強会</h2>
+          <span class="rule-badge">移動・準備時間</span>
+        </div>
+        <div class="field check-row rule-toggle">
+          <input id="offlineStudyEnabled" type="checkbox">
+          <label for="offlineStudyEnabled">オフライン勉強会ルールを有効にする</label>
+        </div>
+        <div class="field">
+          <label for="offlineStudyMarker">判定文字列</label>
+          <input id="offlineStudyMarker" type="text" autocomplete="off" placeholder="🏫">
+          <span class="hint">会場参加が分かる絵文字やキーワードを指定します。</span>
+        </div>
+        <div class="field time-row">
+          <div>
+            <label for="offlineStudyBeforeHours">開始前</label>
+            <input id="offlineStudyBeforeHours" type="number" min="0" max="24" step="0.5" required>
+          </div>
+          <div>
+            <label for="offlineStudyAfterHours">終了後</label>
+            <input id="offlineStudyAfterHours" type="number" min="0" max="24" step="0.5" required>
+          </div>
+        </div>
+        <span class="hint">単位は時間です。移動、受付、復習などの時間を含めて設定できます。</span>
+      </section>
+
+      <section class="section">
+        <h2>共通設定</h2>
+        <div class="field">
+          <label for="lookAheadDays">判定期間の日数</label>
+          <input id="lookAheadDays" type="number" min="0" max="365" step="1">
+          <span class="hint">今日を0日目として、指定日数後までを含めて判定します。</span>
+        </div>
+        <div class="field check-row">
+          <input id="includeAllDayEvents" type="checkbox">
+          <label for="includeAllDayEvents">終日予定を対象にする</label>
         </div>
         <div class="field check-row">
           <input id="recreateExistingLocks" type="checkbox">
@@ -97,7 +155,7 @@
         <h2>デモ・削除</h2>
         <button onclick="runAction(this, 'generateDummyEvents')">ダミーデータを作成</button>
         <button class="danger" onclick="runAction(this, 'deleteDummyEvents', '識別子を持つダミー予定を削除します。よろしいですか？')">ダミーデータを削除</button>
-        <button class="danger" onclick="runAction(this, 'deleteGeneratedLockEvents', '自動生成予定名と識別子が一致するロック予定を削除します。よろしいですか？')">自動生成予定を削除</button>
+        <button class="danger" onclick="runAction(this, 'deleteGeneratedLockEvents', '飲み会ロックと勉強会の前後バッファを安全条件に従って削除します。よろしいですか？')">自動生成予定を削除</button>
       </section>
     </main>
     <?!= include('JavaScript'); ?>

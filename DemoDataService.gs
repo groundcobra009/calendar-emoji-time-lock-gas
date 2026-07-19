@@ -10,7 +10,11 @@ var CEL_DEMO_TITLES = [
   'オンライン打ち合わせ',
   '歓迎会 🍺',
   'セミナー参加',
-  '食事会 🍺'
+  '食事会 🍺',
+  'AI活用オンライン勉強会 💻',
+  'オンライン読書会 💻',
+  '東京オフライン勉強会 🏫',
+  '技術コミュニティ勉強会 🏫'
 ];
 
 var CEL_DEMO_TIME_SLOTS = [
@@ -33,7 +37,14 @@ function generateDummyEvents() {
 
     for (var i = 0; i < eventCount; i++) {
       var day = addDays_(today, randomInteger_(0, 60));
-      var title = CEL_DEMO_TITLES[randomInteger_(0, CEL_DEMO_TITLES.length - 1)];
+      // 最初の3件で各ルールの動作確認用予定を必ず1件ずつ作ります。
+      var title = i === 0
+        ? 'デモ飲み会 🍺'
+        : i === 1
+          ? 'デモオンライン勉強会 💻'
+          : i === 2
+            ? 'デモオフライン勉強会 🏫'
+            : CEL_DEMO_TITLES[randomInteger_(0, CEL_DEMO_TITLES.length - 1)];
       var slot = CEL_DEMO_TIME_SLOTS[randomInteger_(0, CEL_DEMO_TIME_SLOTS.length - 1)];
       var start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), slot[0], slot[1], 0, 0);
       var end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), slot[2], slot[3], 0, 0);
